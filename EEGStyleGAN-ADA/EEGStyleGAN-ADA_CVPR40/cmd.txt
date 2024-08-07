@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=4 python train.py --outdir=./out/ --data=/Data/summer24/EEGStyleGAN-ADA/data/eeg_imagenet40_cvpr_2017_raw/train/* --cond=1 --gpus=1 --cfg=cifar --mirror=1 --augpipe=bgcfnc
