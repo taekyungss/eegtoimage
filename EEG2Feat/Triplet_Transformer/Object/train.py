@@ -2,7 +2,7 @@
 import os
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import config
 from tqdm import tqdm
@@ -75,7 +75,7 @@ def train(epoch, model, optimizer, loss_fn, miner, train_data, train_dataloader,
             labels_array     = np.concatenate((labels_array, labels.cpu().detach().numpy()), axis=0) if labels_array.size else labels.cpu().detach().numpy()
 
         ### compute k-means score and Umap score on the text and image embeddings
-        num_clusters   = 40
+        num_clusters   = config.num_classes
         # k_means        = K_means(n_clusters=num_clusters)
         # clustering_acc_feat = k_means.transform(eeg_featvec, labels_array)
         # print("[Epoch: {}, Train KMeans score Feat: {}]".format(epoch, clustering_acc_feat))
@@ -121,7 +121,7 @@ def validation(epoch, model, optimizer, loss_fn, miner, train_data, val_dataload
 		labels_array     = np.concatenate((labels_array, labels.cpu().detach().numpy()), axis=0) if labels_array.size else labels.cpu().detach().numpy()
 
 	### compute k-means score and Umap score on the text and image embeddings
-	num_clusters   = 40
+	num_clusters   = config.num_classes
 	# k_means        = K_means(n_clusters=num_clusters)
 	# clustering_acc_feat = k_means.transform(eeg_featvec, labels_array)
 	# print("[Epoch: {}, Val KMeans score Feat: {}]".format(epoch, clustering_acc_feat))
@@ -137,8 +137,9 @@ def validation(epoch, model, optimizer, loss_fn, miner, train_data, val_dataload
 	# tsne_plot = TsnePlot(perplexity=30, learning_rate=700, n_iter=1000)
 	# tsne_plot.plot(eeg_featvec, labels_array, clustering_acc_feat, 'val', experiment_num, epoch, proj_type='feat')
 
-	tsne_plot = TsnePlot(perplexity=30, learning_rate=700, n_iter=1000)
-	tsne_plot.plot(eeg_featvec_proj, labels_array, clustering_acc_proj, 'val', experiment_num, epoch, proj_type='proj')
+
+	# tsne_plot = TsnePlot(perplexity=30, learning_rate=700, n_iter=1000)
+	# tsne_plot.plot(eeg_featvec_proj, labels_array, clustering_acc_proj, 'val', experiment_num, epoch, proj_type='proj')
 
 	return running_loss, clustering_acc_proj
 
@@ -166,16 +167,26 @@ if __name__ == '__main__':
 
     for i in tqdm(natsorted(os.listdir(base_path + train_path))):
         loaded_array = np.load(base_path + train_path + i, allow_pickle=True)
-        x_train_eeg.append(loaded_array[1].T)
-        img = cv2.resize(loaded_array[0], (224, 224))
-        img = (cv2.cvtColor(img, cv2.COLOR_BGR2RGB) - 127.5) / 127.5
-        img = np.transpose(img, (2, 0, 1))
-        x_train_image.append(img)
+        # if loaded_array[1][0] == 2 or loaded_array[1][0] == 6:
+        # x_train_eeg.append(loaded_array[1].T)
+        x_train_eeg.append(loaded_array[0].reshape(124, 32).T)
+        # x_train_eeg.append(np.expand_dims(loaded_array[0].reshape(124, 32).T, axis=0))
+        # img = cv2.resize(loaded_array[0], (224, 224))
+        # img = (cv2.cvtColor(img, cv2.COLOR_BGR2RGB) - 127.5) / 127.5
+        # img = np.transpose(img, (2, 0, 1))
+        # x_train_image.append(img)
+        x_train_image.append(0)
         # if loaded_array[3] not in class_labels:
         # 	class_labels[loaded_array[3]] = label_count
         # 	label_count += 1
         # labels.append(class_labels[loaded_array[3]])
-        labels.append(loaded_array[2])
+        # if loaded_array[1][0] == 2:
+        #     labels.append(0)
+        # elif loaded_array[1][0] == 6:
+        #     labels.append(1)
+        labels.append(loaded_array[1][0]-1)
+        # train_subjects.append(loaded_array[4])
+        # train_subjects.append(0)
         
     x_train_eeg   = np.array(x_train_eeg)
     x_train_image = np.array(x_train_image)
@@ -197,16 +208,27 @@ if __name__ == '__main__':
 
     for i in tqdm(natsorted(os.listdir(base_path + validation_path))):
         loaded_array = np.load(base_path + validation_path + i, allow_pickle=True)
-        x_val_eeg.append(loaded_array[1].T)
-        img = cv2.resize(loaded_array[0], (224, 224))
-        img = (cv2.cvtColor(img, cv2.COLOR_BGR2RGB) - 127.5) / 127.5
-        img = np.transpose(img, (2, 0, 1))
-        x_val_image.append(img)
+        # if loaded_array[1][0] == 2 or loaded_array[1][0] == 6:
+        # x_val_eeg.append(loaded_array[1].T)
+        x_val_eeg.append(loaded_array[0].reshape(124, 32).T)
+        # x_val_eeg.append(np.expand_dims(loaded_array[0].reshape(124, 32).T, axis=0))
+        # img = cv2.resize(loaded_array[0], (224, 224))
+        # img = (cv2.cvtColor(img, cv2.COLOR_BGR2RGB) - 127.5) / 127.5
+        # img = np.transpose(img, (2, 0, 1))
+        # x_val_image.append(img)
+        x_val_image.append(0)
         # if loaded_array[3] not in class_labels:
         # 	class_labels[loaded_array[3]] = label_count
         # 	label_count += 1
         # label_Val.append(class_labels[loaded_array[3]])
-        label_Val.append(loaded_array[2])
+        # label_Val.append(loaded_array[1][0])
+        # if loaded_array[1][0] == 2:
+        #     label_Val.append(0)
+        # elif loaded_array[1][0] == 6:
+        #     label_Val.append(1)
+        label_Val.append(loaded_array[1][0]-1)
+        # val_subjects.append(loaded_array[4])
+        # val_subjects.append(0)
         
     x_val_eeg   = np.array(x_val_eeg)
     x_val_image = np.array(x_val_image)
@@ -222,7 +244,7 @@ if __name__ == '__main__':
     # model     = CNNEEGFeatureExtractor(input_shape=[1, config.input_size, config.timestep],\
     #                                    feat_dim=config.feat_dim,\
     #                                    projection_dim=config.projection_dim).to(config.device)
-    model     = EEGFeatNet(n_features=config.feat_dim, projection_dim=config.projection_dim, num_layers=config.num_layers).to(config.device)
+    model     = EEGFeatNet(n_classes=config.num_classes, in_channels=config.input_size, n_features=config.feat_dim, projection_dim=config.projection_dim, num_layers=config.num_layers).to(config.device)
     model     = torch.nn.DataParallel(model).to(config.device)
     optimizer = torch.optim.Adam(\
                                     list(model.parameters()),\
@@ -243,8 +265,6 @@ if __name__ == '__main__':
         os.makedirs('EXPERIMENT_{}/train/tsne/'.format(experiment_num))
         os.makedirs('EXPERIMENT_{}/test/tsne/'.format(experiment_num))
         os.makedirs('EXPERIMENT_{}/test/umap/'.format(experiment_num))
-        os.makedirs('EXPERIMENT_{}/finetune_ckpt/'.format(experiment_num))
-        os.makedirs('EXPERIMENT_{}/finetune_bestckpt/'.format(experiment_num))
         os.system('cp *.py EXPERIMENT_{}'.format(experiment_num))
 
     ckpt_lst = natsorted(glob('EXPERIMENT_{}/checkpoints/eegfeat_*.pth'.format(experiment_num)))

@@ -1,15 +1,16 @@
 ## Take input of EEG and save it as a numpy array
 import os
-
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 import config
 from tqdm import tqdm
 import numpy as np
 import pdb
+import os
 from natsort import natsorted
 import cv2
+import pickle
 from glob import glob
 from torch.utils.data import DataLoader
 from pytorch_metric_learning import miners, losses
@@ -40,7 +41,7 @@ def train(epoch, model, optimizer, loss_fn, miner, train_data, train_dataloader,
 
     tq = tqdm(train_dataloader)
     # for batch_idx, (eeg, eeg_x1, eeg_x2, gamma, images, labels) in enumerate(tq):
-    for batch_idx, (eeg, images, labels) in enumerate(tq, start=1):
+    for batch_idx, (eeg, images, labels, _) in enumerate(tq, start=1):
         # eeg_x1, eeg_x2 = eeg_x1.to(config.device), eeg_x2.to(config.device)
         eeg    = eeg.to(config.device)
         labels = labels.to(config.device)
@@ -65,7 +66,7 @@ def train(epoch, model, optimizer, loss_fn, miner, train_data, train_dataloader,
 
     if (epoch%config.vis_freq) == 0:
         # for batch_idx, (eeg, eeg_x1, eeg_x2, gamma, images, labels) in enumerate(tqdm(train_dataloader)):
-        for batch_idx, (eeg, images, labels) in enumerate(tqdm(train_dataloader)):
+        for batch_idx, (eeg, images, labels, _) in enumerate(tqdm(train_dataloader)):
             eeg, labels = eeg.to(config.device), labels.to(config.device)
             with torch.no_grad():
                 x_proj = model(eeg)
@@ -75,7 +76,7 @@ def train(epoch, model, optimizer, loss_fn, miner, train_data, train_dataloader,
             labels_array     = np.concatenate((labels_array, labels.cpu().detach().numpy()), axis=0) if labels_array.size else labels.cpu().detach().numpy()
 
         ### compute k-means score and Umap score on the text and image embeddings
-        num_clusters   = 40
+        num_clusters   = config.num_classes
         # k_means        = K_means(n_clusters=num_clusters)
         # clustering_acc_feat = k_means.transform(eeg_featvec, labels_array)
         # print("[Epoch: {}, Train KMeans score Feat: {}]".format(epoch, clustering_acc_feat))
@@ -103,7 +104,7 @@ def validation(epoch, model, optimizer, loss_fn, miner, train_data, val_dataload
 	labels_array      = np.array([])
 
 	tq = tqdm(val_dataloader)
-	for batch_idx, (eeg, images, labels) in enumerate(tq, start=1):
+	for batch_idx, (eeg, images, labels, _) in enumerate(tq, start=1):
 		eeg, labels = eeg.to(config.device), labels.to(config.device)
 		with torch.no_grad():
 			x_proj = model(eeg)
@@ -121,7 +122,7 @@ def validation(epoch, model, optimizer, loss_fn, miner, train_data, val_dataload
 		labels_array     = np.concatenate((labels_array, labels.cpu().detach().numpy()), axis=0) if labels_array.size else labels.cpu().detach().numpy()
 
 	### compute k-means score and Umap score on the text and image embeddings
-	num_clusters   = 40
+	num_clusters   = config.num_classes
 	# k_means        = K_means(n_clusters=num_clusters)
 	# clustering_acc_feat = k_means.transform(eeg_featvec, labels_array)
 	# print("[Epoch: {}, Val KMeans score Feat: {}]".format(epoch, clustering_acc_feat))
@@ -137,8 +138,9 @@ def validation(epoch, model, optimizer, loss_fn, miner, train_data, val_dataload
 	# tsne_plot = TsnePlot(perplexity=30, learning_rate=700, n_iter=1000)
 	# tsne_plot.plot(eeg_featvec, labels_array, clustering_acc_feat, 'val', experiment_num, epoch, proj_type='feat')
 
-	tsne_plot = TsnePlot(perplexity=30, learning_rate=700, n_iter=1000)
-	tsne_plot.plot(eeg_featvec_proj, labels_array, clustering_acc_proj, 'val', experiment_num, epoch, proj_type='proj')
+
+	# tsne_plot = TsnePlot(perplexity=30, learning_rate=700, n_iter=1000)
+	# tsne_plot.plot(eeg_featvec_proj, labels_array, clustering_acc_proj, 'val', experiment_num, epoch, proj_type='proj')
 
 	return running_loss, clustering_acc_proj
 
@@ -151,11 +153,19 @@ if __name__ == '__main__':
     device          = config.device
 
             
+    with open(base_path + config.thoughtviz_path, 'rb') as file:
+        data = pickle.load(file, encoding='latin1')
+        train_X = data['x_train']
+        train_Y = data['y_train']
+        val_X = data['x_test']
+        val_Y = data['y_test']
+
     #load the data
     ## Training data
     x_train_eeg = []
     x_train_image = []
     labels = []
+    x_train_subject=[]
 
     # ## hyperparameters
     batch_size     = config.batch_size
@@ -164,65 +174,66 @@ if __name__ == '__main__':
     class_labels   = {}
     label_count    = 0
 
-    for i in tqdm(natsorted(os.listdir(base_path + train_path))):
-        loaded_array = np.load(base_path + train_path + i, allow_pickle=True)
-        x_train_eeg.append(loaded_array[1].T)
-        img = cv2.resize(loaded_array[0], (224, 224))
-        img = (cv2.cvtColor(img, cv2.COLOR_BGR2RGB) - 127.5) / 127.5
-        img = np.transpose(img, (2, 0, 1))
-        x_train_image.append(img)
-        # if loaded_array[3] not in class_labels:
-        # 	class_labels[loaded_array[3]] = label_count
-        # 	label_count += 1
-        # labels.append(class_labels[loaded_array[3]])
-        labels.append(loaded_array[2])
+    for idx in tqdm(range(train_X.shape[0])):
+        # x_train_eeg.append(np.transpose(train_X[idx], (2, 1, 0)))
+        x_train_eeg.append(np.squeeze(np.transpose(train_X[idx], (2, 1, 0)), axis=0))
+        x_train_image.append(np.zeros(shape=(2, 2)))
+        x_train_subject.append(0)
+        labels.append(np.argmax(train_Y[idx]))
         
     x_train_eeg   = np.array(x_train_eeg)
     x_train_image = np.array(x_train_image)
     train_labels  = np.array(labels)
+    x_train_subject = np.array(x_train_subject)
+
+    print(x_train_eeg.shape, x_train_image.shape, train_labels.shape, x_train_subject.shape)
+    print('Total number of classes: {}'.format(len(np.unique(train_labels))), np.unique(train_labels))
 
     # ## convert numpy array to tensor
-    x_train_eeg   = torch.from_numpy(x_train_eeg).float().to(device)
-    x_train_image = torch.from_numpy(x_train_image).float().to(device)
-    train_labels  = torch.from_numpy(train_labels).long().to(device)
+    x_train_eeg   = torch.from_numpy(x_train_eeg).float()#.to(device)
+    x_train_image = torch.from_numpy(x_train_image).float()#.to(device)
+    train_labels  = torch.from_numpy(train_labels).long()#.to(device)
+    x_train_subject  = torch.from_numpy(x_train_subject).long()#.to(device)
 
-    train_data       = EEGDataset(x_train_eeg, x_train_image, train_labels)
+    train_data       = EEGDataset(x_train_eeg, x_train_image, train_labels, x_train_subject)
     train_dataloader = DataLoader(train_data, batch_size=batch_size, shuffle=True, pin_memory=False, drop_last=True)
 
 
     ## Validation data
-    x_val_eeg = []
+    x_val_eeg   = []
     x_val_image = []
-    label_Val = []
+    label_val   = []
+    x_val_subject = []
 
-    for i in tqdm(natsorted(os.listdir(base_path + validation_path))):
-        loaded_array = np.load(base_path + validation_path + i, allow_pickle=True)
-        x_val_eeg.append(loaded_array[1].T)
-        img = cv2.resize(loaded_array[0], (224, 224))
-        img = (cv2.cvtColor(img, cv2.COLOR_BGR2RGB) - 127.5) / 127.5
-        img = np.transpose(img, (2, 0, 1))
-        x_val_image.append(img)
-        # if loaded_array[3] not in class_labels:
-        # 	class_labels[loaded_array[3]] = label_count
-        # 	label_count += 1
-        # label_Val.append(class_labels[loaded_array[3]])
-        label_Val.append(loaded_array[2])
-        
+    for idx in tqdm(range(val_X.shape[0])):
+        # x_val_eeg.append(np.transpose(val_X[idx], (2, 1, 0)))
+        x_val_eeg.append(np.squeeze(np.transpose(val_X[idx], (2, 1, 0)), axis=0))
+        x_val_image.append(np.zeros(shape=(2, 2)))
+        x_val_subject.append(0.0)
+        label_val.append(np.argmax(val_Y[idx]))
+
     x_val_eeg   = np.array(x_val_eeg)
     x_val_image = np.array(x_val_image)
-    val_labels  = np.array(label_Val)
+    label_val   = np.array(label_val)
+    x_val_subject = np.array(x_val_subject)
+
+    print(x_val_eeg.shape, x_val_image.shape, label_val.shape, x_val_subject.shape)
+    print('Total number of classes: {}'.format(len(np.unique(label_val))), np.unique(label_val))
 
     x_val_eeg   = torch.from_numpy(x_val_eeg).float().to(device)
-    x_val_image = torch.from_numpy(x_val_image).float().to(device)
-    val_labels  = torch.from_numpy(val_labels).long().to(device)
+    x_val_image = torch.from_numpy(x_val_image).float()#.to(device)
+    label_val   = torch.from_numpy(label_val).long().to(device)
+    x_val_subject  = torch.from_numpy(x_val_subject).long()#.to(device)
 
-    val_data       = EEGDataset(x_val_eeg, x_val_image, val_labels)
+    val_data       = EEGDataset(x_val_eeg, x_val_image, label_val, x_val_subject)
     val_dataloader = DataLoader(val_data, batch_size=batch_size, shuffle=False, pin_memory=False, drop_last=True)
 
     # model     = CNNEEGFeatureExtractor(input_shape=[1, config.input_size, config.timestep],\
     #                                    feat_dim=config.feat_dim,\
     #                                    projection_dim=config.projection_dim).to(config.device)
-    model     = EEGFeatNet(n_features=config.feat_dim, projection_dim=config.projection_dim, num_layers=config.num_layers).to(config.device)
+    model     = EEGFeatNet(n_classes=config.num_classes, in_channels=config.input_size,\
+                           n_features=config.feat_dim, projection_dim=config.projection_dim,\
+                           num_layers=config.num_layers).to(config.device)
     model     = torch.nn.DataParallel(model).to(config.device)
     optimizer = torch.optim.Adam(\
                                     list(model.parameters()),\
@@ -235,7 +246,7 @@ if __name__ == '__main__':
     if len(dir_info)==0:
         experiment_num = 1
     else:
-        experiment_num = int(dir_info[-1].split('_')[-1]) + 1
+        experiment_num = int(dir_info[-1].split('_')[-1]) #+ 1
 
     if not os.path.isdir('EXPERIMENT_{}'.format(experiment_num)):
         os.makedirs('EXPERIMENT_{}'.format(experiment_num))

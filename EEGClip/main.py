@@ -158,7 +158,8 @@ val_data_loader = torch.utils.data.DataLoader(val_data, batch_size = batch_size,
 # ## define the model
 eeg_embedding = EEG_Encoder(projection_dim=projection_dim, num_layers=num_layers).to(device)
 image_embedding = torchvision.models.resnet50(pretrained=True).to(device)
-weights = ResNet50_Weights.DEFAULT
+# weights = ResNet50_Weights.DEFAULT
+weights=ResNet50_Weights.IMAGENET1K_V1
 preprocess = weights.transforms().to(device)
 
 for param in image_embedding.parameters():

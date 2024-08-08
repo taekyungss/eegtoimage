@@ -20,9 +20,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from dataloader import EEGDataset
-from network import EEGFeatNet
+from network import Conformer, interaug
 # from model import ModifiedResNet
 # from CLIPModel import CLIPModel
+from torch.autograd import Variable
 from visualizations import Umap, K_means, TsnePlot, save_image
 from losses import ContrastiveLoss
 from dataaugmentation import apply_augmentation
@@ -44,6 +45,13 @@ def train(epoch, model, optimizer, loss_fn, miner, train_data, train_dataloader,
         # eeg_x1, eeg_x2 = eeg_x1.to(config.device), eeg_x2.to(config.device)
         eeg    = eeg.to(config.device)
         labels = labels.to(config.device)
+        # eeg = Variable(eeg.type(torch.Tensor)).to(config.device)
+        # labels = Variable(labels.type(torch.LongTensor)).to(config.device)
+
+
+        aug_eeg, aug_labels = interaug(eeg, labels)
+        eeg = torch.cat((eeg,aug_eeg))
+        labels = torch.cat((labels,aug_labels))
 
         optimizer.zero_grad()
 
@@ -222,7 +230,7 @@ if __name__ == '__main__':
     # model     = CNNEEGFeatureExtractor(input_shape=[1, config.input_size, config.timestep],\
     #                                    feat_dim=config.feat_dim,\
     #                                    projection_dim=config.projection_dim).to(config.device)
-    model     = EEGFeatNet(n_features=config.feat_dim, projection_dim=config.projection_dim, num_layers=config.num_layers).to(config.device)
+    model     = Conformer().to(config.device)
     model     = torch.nn.DataParallel(model).to(config.device)
     optimizer = torch.optim.Adam(\
                                     list(model.parameters()),\

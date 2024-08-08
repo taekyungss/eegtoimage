@@ -5,9 +5,11 @@ import numpy as np
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # EEG Data
-train_data_path = '/media/A/dataset/eeg_imagenet40_cvpr_2017_raw/train/*'
-val_data_path   = '/media/A/dataset/eeg_imagenet40_cvpr_2017_raw/val/*'
-test_data_path   = '/media/A/dataset/eeg_imagenet40_cvpr_2017_raw/test/*'
+train_data_path = '/Data/summer24/eegtoimage/data/eeg_imagenet40_cvpr_2017_raw/train/*'
+val_data_path   = '/Data/summer24/eegtoimage/data/eeg_imagenet40_cvpr_2017_raw/val/*'
+test_data_path   = '/Data/summer24/eegtoimage/data/eeg_imagenet40_cvpr_2017_raw/test/*'
+
+
 
 image_height = 128#224
 image_width  = 128#224
