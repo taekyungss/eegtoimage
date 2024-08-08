@@ -10,7 +10,7 @@ import warnings
 warnings.warn = warn
 
 
-
+eeg_channel = 128
 base_path       = '/Data/summer24/eegtoimage/'
 train_path      = 'data/eeg_imagenet40_cvpr_2017_raw/train/'
 validation_path = 'data/eeg_imagenet40_cvpr_2017_raw/val/'
@@ -27,7 +27,7 @@ input_size     = 128 # Number of EEG channels
 timestep       = 440
 # hidden_size    = embedding_dim//2
 num_layers     = 4
-batch_size     = 256 #48
+batch_size     = 64 #48
 temperature    = 0.5
 epoch          = 8192
 lr             = 3e-4

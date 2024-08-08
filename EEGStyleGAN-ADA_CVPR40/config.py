@@ -10,7 +10,7 @@ val_data_path   = '/Data/summer24/eegtoimage/data/eeg_imagenet40_cvpr_2017_raw/v
 test_data_path   = '/Data/summer24/eegtoimage/data/eeg_imagenet40_cvpr_2017_raw/test/*'
 
 
-
+eeg_channel = 128
 image_height = 128#224
 image_width  = 128#224
 input_channel= 3
