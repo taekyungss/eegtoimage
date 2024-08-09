@@ -29,7 +29,7 @@ timestep       = 440
 num_layers     = 4
 batch_size     = 64 #48
 temperature    = 0.5
-epoch          = 8192
+epoch          = 500
 lr             = 3e-4
 
 # Data Augmentation Hyper-parameters

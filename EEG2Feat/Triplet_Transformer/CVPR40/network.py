@@ -156,18 +156,16 @@ class TransformerEncoder(nn.Sequential):
 
 class Conformer(nn.Sequential):
     def __init__(self, emb_size=40, depth=6, n_channel=128, **kwargs):
-        super().__init__(
-
-            PatchEmbedding(emb_size),
-            TransformerEncoder(depth, emb_size)
-            # ClassificationHead(emb_size, n_classes)
-        )
+        super().__init__()
+        self.patch_embedding = PatchEmbedding(emb_size)
+        self.transofmer_encoder = TransformerEncoder(depth, emb_size)
         self.fc = nn.Linear(emb_size,n_channel)
 
     def forward(self,x):
-        x = super().forward(x)
+        x = self.patch_embedding(x)
+        x = self.transofmer_encoder(x)
         x = x.mean(dim=1)
-        x = self.fc
+        x = self.fc(x)
         return x
 # 여기서 나온 값이 [8x128 / 40x128] 앞의 8x128 이 왜인지 모르곘음
 
