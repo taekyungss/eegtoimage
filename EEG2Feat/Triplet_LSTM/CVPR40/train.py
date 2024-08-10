@@ -26,7 +26,7 @@ from network import EEGFeatNet
 from visualizations import Umap, K_means, TsnePlot, save_image
 from losses import ContrastiveLoss
 from dataaugmentation import apply_augmentation
-
+import time 
 np.random.seed(45)
 torch.manual_seed(45)
 
@@ -88,8 +88,8 @@ def train(epoch, model, optimizer, loss_fn, miner, train_data, train_dataloader,
         # tsne_plot.plot(eeg_featvec, labels_array, clustering_acc_feat, 'train', experiment_num, epoch, proj_type='feat')
         
 
-        # tsne_plot = TsnePlot(perplexity=30, learning_rate=700, n_iter=1000)
-        # tsne_plot.plot(eeg_featvec_proj, labels_array, clustering_acc_proj, 'train', experiment_num, epoch, proj_type='proj')
+        tsne_plot = TsnePlot(perplexity=30, learning_rate=700, n_iter=1000)
+        tsne_plot.plot(eeg_featvec_proj, labels_array, clustering_acc_proj, 'train', experiment_num, epoch, proj_type='proj')
 
     return running_loss
  
@@ -144,7 +144,7 @@ def validation(epoch, model, optimizer, loss_fn, miner, train_data, val_dataload
 
     
 if __name__ == '__main__':
-
+    start_time = time.time()
     base_path       = config.base_path
     train_path      = config.train_path
     validation_path = config.validation_path
@@ -301,6 +301,9 @@ if __name__ == '__main__':
                 'optimizer_state_dict': optimizer.state_dict(),
                 # 'scheduler_state_dict': scheduler.state_dict(),
               }, 'EXPERIMENT_{}/checkpoints/eegfeat_{}.pth'.format(experiment_num, 'all'))
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Total time elapsed: {elapsed_time:.2f} seconds")
 
         # running_val_loss   = validation(epoch, model, optimizer, loss_fn, train_data, val_dataloader)
         # print(np.mean(running_train_loss), eeg_featvec.shape, labels_array.shape)

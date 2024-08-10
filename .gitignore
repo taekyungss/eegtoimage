@@ -11,6 +11,8 @@ data/
 *.pth
 EXPERIMENT_1/
 EXPERIMENT_2/
+EXPERIMENT_3/
+weights/
 
 
 # Distribution / packaging

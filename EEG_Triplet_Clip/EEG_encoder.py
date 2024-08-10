@@ -16,8 +16,6 @@ np.random.seed(45)
 torch.manual_seed(45)
 
 
-# Convolution module
-# use conv to capture local features, instead of postion embedding.
 class PatchEmbedding(nn.Module):
     def __init__(self, emb_size=40):
         # self.patch_size = patch_size
@@ -167,7 +165,7 @@ class Conformer(nn.Sequential):
         x = x.mean(dim=1)
         x = self.fc(x)
         return x
-    
+
 # def interaug(timg, label):  
 #     aug_data = []
 #     aug_label = []
@@ -224,4 +222,21 @@ class Conformer(nn.Sequential):
 #     aug_label = torch.from_numpy(aug_label-1).cuda().long()
 #     return aug_data, aug_label
 
+    
+class ProjectionHead(nn.Module):
+    def __init__(self, embedding_dim, projection_dim):
+        super().__init__()
+        self.projection = nn.Linear(embedding_dim, projection_dim, bias=False)
+        # self.gelu = nn.GELU()
+        # self.fc = nn.Linear(projection_dim, projection_dim)
+        # self.dropout = nn.Dropout(dropout)
+        # self.layer_norm = nn.LayerNorm(projection_dim)
 
+    def forward(self, x):
+        projected = self.projection(x)
+        # x = self.gelu(projected)
+        # x = self.fc(x)
+        # x = self.dropout(x)
+        # x += projected
+        # return self.layer_norm(x)
+        return projected

@@ -45,3 +45,19 @@ Decoding the human brain has been a hallmark of neuroscientists and Artificial I
 ## References
 
 * StyleGAN2-ADA [[Link](https://github.com/NVlabs/stylegan2-ada-pytorch)]
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- taetae -->
+
+
+$ pip install git+https://github.com/openai/CLIP.git

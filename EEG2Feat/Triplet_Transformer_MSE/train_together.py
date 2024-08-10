@@ -13,20 +13,22 @@ import cv2
 from glob import glob
 from torch.utils.data import DataLoader
 from pytorch_metric_learning import miners, losses
-import time
+
 import torch
 import lpips
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from dataloader import EEGDataset
-from network import Conformer
+from network import Conformer, ProjectionHead
 # from model import ModifiedResNet
 # from CLIPModel import CLIPModel
 from torch.autograd import Variable
 from visualizations import Umap, K_means, TsnePlot, save_image
 from losses import ContrastiveLoss
 from dataaugmentation import apply_augmentation
+import torchvision.models as models
+
 
 np.random.seed(45)
 torch.manual_seed(45)
@@ -43,25 +45,39 @@ def train(epoch, model, optimizer, loss_fn, miner, train_data, train_dataloader,
     # for batch_idx, (eeg, eeg_x1, eeg_x2, gamma, images, labels) in enumerate(tq):
     for batch_idx, (eeg, images, labels) in enumerate(tq, start=1):
         # eeg_x1, eeg_x2 = eeg_x1.to(config.device), eeg_x2.to(config.device)
-        eeg = torch.transpose(eeg, 1,2)
-        eeg = torch.unsqueeze(eeg, dim=1)
-        eeg = eeg.to(config.device).float()
+        eeg = torch.unsqueeze(torch.transpose(eeg, 1, 2), dim=1).to(config.device).float()
         labels = labels.to(config.device).long()
+        images = images.to(config.device)
+        optimizer.zero_grad()
         # aug_data, aug_label = interaug(eeg, labels)
         # eeg = torch.cat((eeg, aug_data))
         # labels = torch.cat((labels, aug_label))
 
-        optimizer.zero_grad()
+        eeg_embedding = model(eeg)
 
-        # x1_proj, x1 = model(eeg_x1)
-        # x2_proj, x2 = model(eeg_x2)
-        # x_proj = model(eeg)
-        outputs = model(eeg)
-
-        hard_pairs = miner(outputs, labels)
-        loss = loss_fn(outputs, labels, hard_pairs)
+        image_encoder = models.resnet50(pretrained=True).to(config.device)
+        weights = models.ResNet50_Weights.IMAGENET1K_V1
+        preprocess = weights.transforms().to(config.device)
         
-        # loss  = loss_fn(x1_proj, x2_proj)
+        for param in image_encoder.parameters():
+            param.requires_grad = False
+        
+        num_features = image_encoder.fc.in_features
+        image_encoder.fc = nn.Sequential(
+            nn.ReLU(),
+            nn.Linear(num_features, config.eeg_channel, bias=False)
+        ).to(config.device)
+
+        with torch.no_grad():
+            image_embeddings = image_encoder(images)
+
+        hard_pairs = miner(eeg_embedding, labels)
+        tri_loss = loss_fn(eeg_embedding, labels, hard_pairs)
+        criterion = nn.MSELoss()
+        mse_loss = criterion(eeg_embedding,image_embeddings)
+        loss = tri_loss + mse_loss
+        
+        # tri_loss  = loss_fn(x1_proj, x2_proj)
         # backpropagate and update parameters
         loss.backward()
         optimizer.step()
@@ -70,33 +86,27 @@ def train(epoch, model, optimizer, loss_fn, miner, train_data, train_dataloader,
 
         tq.set_description('Train:[{}, {:0.3f}]'.format(epoch, np.mean(running_loss)))
 
+# visualization
+
     if (epoch%config.vis_freq) == 0:
         # for batch_idx, (eeg, eeg_x1, eeg_x2, gamma, images, labels) in enumerate(tqdm(train_dataloader)):
         for batch_idx, (eeg, images, labels) in enumerate(tqdm(train_dataloader)):
-            eeg = torch.transpose(eeg, 1,2)
-            eeg = torch.unsqueeze(eeg, dim=1)
-            eeg = eeg.to(config.device).float()
+            eeg = torch.unsqueeze(torch.transpose(eeg, 1, 2), dim=1).to(config.device).float()
             labels = labels.to(config.device).long()
+            images = images.to(config.device)
+
             with torch.no_grad():
-                outputs = model(eeg)
+                eeg_embedding = model(eeg)
             # eeg_featvec      = np.concatenate((eeg_featvec, x.cpu().detach().numpy()), axis=0) if eeg_featvec.size else x.cpu().detach().numpy()
-            eeg_featvec_proj = np.concatenate((eeg_featvec_proj, outputs.cpu().detach().numpy()), axis=0) if eeg_featvec_proj.size else outputs.cpu().detach().numpy()
+            eeg_featvec_proj = np.concatenate((eeg_featvec_proj, eeg_embedding.cpu().detach().numpy()), axis=0) if eeg_featvec_proj.size else eeg_embedding.cpu().detach().numpy()
             # eeg_gamma        = np.concatenate((eeg_gamma, gamma.cpu().detach().numpy()), axis=0) if eeg_gamma.size else gamma.cpu().detach().numpy()
             labels_array     = np.concatenate((labels_array, labels.cpu().detach().numpy()), axis=0) if labels_array.size else labels.cpu().detach().numpy()
 
         ### compute k-means score and Umap score on the text and image embeddings
         num_clusters   = 40
-        # k_means        = K_means(n_clusters=num_clusters)
-        # clustering_acc_feat = k_means.transform(eeg_featvec, labels_array)
-        # print("[Epoch: {}, Train KMeans score Feat: {}]".format(epoch, clustering_acc_feat))
-
         k_means        = K_means(n_clusters=num_clusters)
         clustering_acc_proj = k_means.transform(eeg_featvec_proj, labels_array)
         print("[Epoch: {}, Train KMeans score Proj: {}]".format(epoch, clustering_acc_proj))
-
-        # tsne_plot = TsnePlot(perplexity=30, learning_rate=700, n_iter=1000)
-        # tsne_plot.plot(eeg_featvec, labels_array, clustering_acc_feat, 'train', experiment_num, epoch, proj_type='feat')
-        
 
         tsne_plot = TsnePlot(perplexity=30, learning_rate=700, n_iter=1000)
         tsne_plot.plot(eeg_featvec_proj, labels_array, clustering_acc_proj, 'train', experiment_num, epoch, proj_type='proj')
@@ -113,27 +123,54 @@ def validation(epoch, model, optimizer, loss_fn, miner, train_data, val_dataload
 
     tq = tqdm(val_dataloader)
     for batch_idx, (eeg, images, labels) in enumerate(tq, start=1):
-        eeg = torch.transpose(eeg, 1,2)
-        eeg = torch.unsqueeze(eeg, dim=1)
-        eeg = eeg.to(config.device).float()
+        eeg = torch.unsqueeze(torch.transpose(eeg, 1, 2), dim=1).to(config.device).float()
         labels = labels.to(config.device).long()
-
+        images = images.to(config.device)
+        optimizer.zero_grad()
         # Data augmentation
         # aug_data, aug_label = interaug(eeg, labels)
         # eeg = torch.cat((eeg, aug_data))
         # labels = torch.cat((labels, aug_label))
+        # image_encoder  = models.resnet50(pretrained=True).to(config.device)
+        # image_encoder.eval()
+        # for param in image_encoder.parameters():
+        #     param.requires_grad = False
+
+        # with torch.no_grad():
+        #     eeg_embedding = model(eeg)
+        #     image_embeddings = image_encoder(images)
+        #     projectionhead = ProjectionHead(image_embeddings.shape[1],config.eeg_channel).to(config.device)
+        #     image_embeddings = projectionhead(image_embeddings)
+
+        image_encoder = models.resnet50(pretrained=True).to(config.device)
+        weights = models.ResNet50_Weights.IMAGENET1K_V1
+        preprocess = weights.transforms().to(config.device)
+        
+        for param in image_encoder.parameters():
+            param.requires_grad = False
+        
+        num_features = image_encoder.fc.in_features
+        image_encoder.fc = nn.Sequential(
+            nn.ReLU(),
+            nn.Linear(num_features, config.eeg_channel, bias=False)
+        ).to(config.device)
 
         with torch.no_grad():
-            outputs = model(eeg)
-            hard_pairs = miner(outputs, labels)
-            loss = loss_fn(outputs, labels, hard_pairs)
+            image_embeddings = image_encoder(images)
+            eeg_embedding = model(eeg)
+
+            hard_pairs = miner(eeg_embedding, labels)
+            tri_loss = loss_fn(eeg_embedding, labels, hard_pairs)
+            criterion = nn.MSELoss()
+            mse_loss = criterion(eeg_embedding,image_embeddings)
+            loss = tri_loss + mse_loss
 
             running_loss.append(loss.detach().cpu().numpy())
 
         tq.set_description('Val:[{}, {:0.3f}]'.format(epoch, np.mean(running_loss)))
 
         # Update feature vectors and labels array
-        eeg_featvec_proj = np.concatenate((eeg_featvec_proj, outputs.cpu().detach().numpy()), axis=0) if eeg_featvec_proj.size else outputs.cpu().detach().numpy()
+        eeg_featvec_proj = np.concatenate((eeg_featvec_proj, eeg_embedding.cpu().detach().numpy()), axis=0) if eeg_featvec_proj.size else eeg_embedding.cpu().detach().numpy()
         labels_array = np.concatenate((labels_array, labels.cpu().detach().numpy()), axis=0) if labels_array.size else labels.cpu().detach().numpy()
 
     # Compute k-means score on the projections
@@ -148,6 +185,7 @@ def validation(epoch, model, optimizer, loss_fn, miner, train_data, val_dataload
 
     return running_loss, clustering_acc_proj
 
+import time
     
 if __name__ == '__main__':
     start_time = time.time()
