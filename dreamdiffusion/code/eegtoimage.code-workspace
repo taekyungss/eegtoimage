@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "eegtoimage",
+			"path": "../.."
+		},
+		{
+			"name": "eeg_imagenet40_cvpr_2017_raw",
+			"path": "../../../../Downloads/eeg_imagenet40_cvpr_2017_raw/eeg_imagenet40_cvpr_2017_raw"
+		}
+	],
+	"settings": {}
+}
