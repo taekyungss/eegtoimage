@@ -666,7 +666,6 @@ class LatentDiffusion(DDPM):
         self.first_stage_model = model.eval()
 
     def freeze_diffusion_model(self):
-        # definition : self.model = DiffusionWrapper(unet_config, conditioning_key)
         for param in self.model.parameters():
             param.requires_grad = False
 
@@ -681,6 +680,7 @@ class LatentDiffusion(DDPM):
     def unfreeze_cond_stage(self):
         for param in self.cond_stage_model.parameters():
             param.requires_grad = True
+   
 
     def freeze_first_stage(self):
         self.first_stage_model.trainable = False
@@ -692,9 +692,9 @@ class LatentDiffusion(DDPM):
         for param in self.first_stage_model.parameters():
             param.requires_grad = True
 
+# 일부만 unfreezing (attn / time_embed_condtion / norm2 + projection_layer / channel_mapper / dim_mapper)
     def unfreeze_cond_stage_only(self):
         self.first_stage_model.trainable = False
-        # cond parmas : unet 파라미터 (unet  attention / time_embed (Unet입력 부분))
         cond_parms = [p for n, p in self.named_parameters() 
                     if 'attn2' in n or 'time_embed_condtion' in n or 'norm2' in n ]
         
@@ -706,9 +706,8 @@ class LatentDiffusion(DDPM):
         for p in params:
             p.requires_grad = True
 
-
-
     def freeze_whole_model(self):
+        # first_stage_model -> autoencoder
         self.first_stage_model.trainable = False
         for param in self.parameters():
             param.requires_grad = False
@@ -738,7 +737,7 @@ class LatentDiffusion(DDPM):
             assert config != '__is_unconditional__'
             model = instantiate_from_config(config)
             self.cond_stage_model = model
-
+            
     def _get_denoise_row_from_list(self, samples, desc='', force_no_decoder_quantization=False):
         denoise_row = []
         for zd in tqdm(samples, desc=desc):
@@ -1638,7 +1637,7 @@ class LatentDiffusion(DDPM):
         x = 2. * (x - x.min()) / (x.max() - x.min()) - 1.
         return x
 
-
+# 각각의 모듈들을 연결해주는 함수 (조건에 맞게끔 결합시킨 이후 ddpm 모델 실행하도록 만듬)
 class DiffusionWrapper(pl.LightningModule):
     def __init__(self, diff_model_config, conditioning_key):
         super().__init__()

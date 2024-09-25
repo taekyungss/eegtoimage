@@ -154,6 +154,7 @@ def main(config):
         loaded_array = np.load(base_path + train_path + i, allow_pickle=True)
         x_train_eeg.append(loaded_array[1].T)
         x_train_raw_img.append(loaded_array[0])
+        # img 형태가 (333, 500, 3)
         img = cv2.resize(loaded_array[0], (512, 512))
         img =((img) - 127.5) / 127.5 
         img = np.transpose(img, (2, 0, 1))
@@ -201,12 +202,15 @@ def main(config):
     val_labels  = torch.from_numpy(val_labels).long().to(device)
 
     val_data       = EEGDataset(x_val_eeg, x_val_image,x_val_raw_img, val_labels)
+    # loader불러오지만 여기서 사용 x 뒤에 eLMD코드 안에 finetune / generate_images 함수안에 loader가 또 있음 -> 정리 필요
     val_dataloader = DataLoader(val_data, batch_size=batch_size, shuffle=False, pin_memory=False, drop_last=True)
 
-    # prepare pretrained mbm 
+    # prepare pretrained mbm
+    # (stage1 의 pth값 불러오기) 안에 있는 '/Data/summer24/DreamDiffusion/stage1_weight/eegfeat_all_0.9702620967741935.pth' 
     pretrain_mbm_metafile = torch.load(config.pretrain_mbm_path, map_location='cpu')
 
     # create generateive model
+    # eLDM -> ldm_for_eeg.py (eeg & LDM 힙친 모델 불러와서 정의)
     generative_model = eLDM(pretrain_mbm_metafile, num_voxels,
                 device=device, pretrain_root=config.pretrain_gm_path, logger=config.logger, 
                 ddim_steps=config.ddim_steps, global_pool=config.global_pool, use_time_cond=config.use_time_cond, clip_tune = config.clip_tune, cls_tune = config.cls_tune)

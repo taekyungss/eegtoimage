@@ -110,6 +110,7 @@ class eLDM:
             logger=None, ddim_steps=125, global_pool = True, use_time_cond=False, clip_tune = True, cls_tune = False, temperature=1.0):
         # self.ckp_path = os.path.join(pretrain_root, 'model.ckpt')
 
+        # pre-trained LDM 불러오고, config 파일 가져오기 (해당 config안에는 unet , diffusion, autoencoder , CLIP등의 경로 및 파라미터 값)
         self.ckp_path = '/Data/summer24/DreamDiffusion/pretrains/models/v1-5-pruned.ckpt'
         self.config_path = os.path.join('/Data/summer24/DreamDiffusion/pretrains/models/config15.yaml')
         config = OmegaConf.load(self.config_path)
@@ -118,14 +119,18 @@ class eLDM:
         self.cond_dim = config.model.params.unet_config.params.context_dim
         # print(config.model.target)
 
+        # 해당 pretrianed 모델을 인스턴스화시키기 -> 이후, 해당 인스턴스를 호출해서 사용하는 구조로 구성되어 있음
         model = instantiate_from_config(config.model)
+        # sd 모델 불러오기
         pl_sd = torch.load(self.ckp_path, map_location="cpu")['state_dict']
         m, u = model.load_state_dict(pl_sd, strict=False)
         model.cond_stage_trainable = True
 
         # model.cond_stage_model = cond_stage_model(metafile, num_voxels, self.cond_dim, global_pool=global_pool, clip_tune = clip_tune,cls_tune = cls_tune)
+        # model.cond_stage_model -> stage1 모델 정의해주고, 해당 모델 metafile(가중치 값 가져오기)
         model.cond_stage_model = cond_stage_model(metafile, num_voxels, self.cond_dim, global_pool=global_pool, clip_tune = clip_tune, cls_tune = cls_tune)
         model.ddim_steps = ddim_steps
+        # diffusion wrapper의 파라미터 초기화
         model.re_init_ema()
         if logger is not None:
             logger.watch(model, log="all", log_graph=False)
@@ -146,6 +151,8 @@ class eLDM:
         self.metafile = metafile
         self.temperature=temperature
 
+
+    # stage2에서 pretrain된 SD모델 가져와서, eeg encoder 값을 conditon으로 unet crssattn에 주입시키면서 finetuning 하는 부분
     def finetune(self, trainers, dataset, valid_dataset, bs1, lr1,
                 output_path, config=None):
         config.trainer = None
@@ -163,11 +170,15 @@ class eLDM:
         
         train_loader = DataLoader(dataset, batch_size=bs1,pin_memory=False, shuffle=True)
         valid_loader = DataLoader(valid_dataset, batch_size=bs1,pin_memory=False, shuffle=True)
+        
+        # 모델 얼리고, 특정 부분만 학습 시키는 부분 설정 (ddpm.py안에 들어 있음)
 
-        self.model.unfreeze_whole_model()
-        self.model.freeze_first_stage()
-        # self.model.freeze_whole_model()
+        self.model.freeze_whole_model()
+        self.model.freeze_diffusion_model()
+        self.model.unfreeze_cond_stage_only()
+        # self.model.freeze_first_stage()
         # self.model.unfreeze_cond_stage()
+        # self.model.train_cond_stage_only()
 
         self.model.learning_rate = lr1
         self.model.train_cond_stage_only = True
